@@ -11,11 +11,28 @@
  */
 
 const express = require("express");
-const { trace, context, SpanStatusCode } = require("@opentelemetry/api");
+const { trace, SpanStatusCode, metrics } = require("@opentelemetry/api");
 const pino = require("pino");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Get meter for custom metrics
+const meter = metrics.getMeter(
+  process.env.OTEL_SERVICE_NAME,
+  process.env.OTEL_SERVICE_VERSION
+);
+
+// Create custom metrics
+const requestCounter = meter.createCounter("http.server.requests.total", {
+  description: "Total number of HTTP requests",
+  unit: "1",
+});
+
+const errorCounter = meter.createCounter("http.server.requests.errors", {
+  description: "Total number of HTTP requests that resulted in errors",
+  unit: "1",
+});
 
 // Setup logger with Loki integration
 const logger = pino({
@@ -62,7 +79,7 @@ const logger = pino({
 // Middleware
 app.use(express.json());
 
-// Add request logging middleware with trace correlation
+// Add request logging middleware with trace correlation and metrics
 app.use((req, res, next) => {
   const start = Date.now();
   res.on("finish", () => {
@@ -71,6 +88,21 @@ app.use((req, res, next) => {
     // Get current trace context for correlation
     const span = trace.getActiveSpan();
     const spanContext = span?.spanContext();
+
+    // Metric attributes for better observability
+    const metricAttributes = {
+      "http.method": req.method,
+      "http.route": req.route?.path || req.url,
+      "http.status_code": res.statusCode,
+    };
+
+    // Increment total requests counter
+    requestCounter.add(1, metricAttributes);
+
+    // Increment error counter for error responses (status >= 400)
+    if (res.statusCode >= 400) {
+      errorCounter.add(1, metricAttributes);
+    }
 
     logger.info(
       {
@@ -92,8 +124,8 @@ app.use((req, res, next) => {
 
 // Get the tracer for manual instrumentation
 const tracer = trace.getTracer(
-  process.env.OTEL_SERVICE_NAME || "observability-lab-service",
-  process.env.OTEL_SERVICE_VERSION || "1.0.0"
+  process.env.OTEL_SERVICE_NAME,
+  process.env.OTEL_SERVICE_VERSION
 );
 
 // ========================================

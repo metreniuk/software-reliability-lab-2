@@ -72,10 +72,10 @@ const metricExporter = new OTLPMetricExporter({
   headers: headers,
 });
 
-// Create a metric reader that exports metrics every 60 seconds
+// Create a metric reader that exports metrics every 5 seconds
 const metricReader = new PeriodicExportingMetricReader({
   exporter: metricExporter,
-  exportIntervalMillis: 60000, // Export every 60 seconds
+  exportIntervalMillis: 5000, // Export every 5 seconds
 });
 
 // Configure resource attributes

@@ -187,13 +187,12 @@ curl http://localhost:3000/api/random
 
 ```bash
 # Run this in a loop to generate ongoing traffic
-for i in {1..50}; do
+for i in {1..1000}; do
   curl -s http://localhost:3000/api/users > /dev/null
-  curl -s http://localhost:3000/api/users/$((RANDOM % 100)) > /dev/null
   curl -s -X POST http://localhost:3000/api/orders > /dev/null
   curl -s http://localhost:3000/api/random > /dev/null
   echo "Request batch $i completed"
-  sleep 2
+  sleep 1
 done
 ```
 
@@ -217,13 +216,9 @@ done
 #### 5.2 View Metrics
 
 1. In **Explore**, switch to the **Prometheus** or **Mimir** data source
-2. Look for metrics like:
-   - `http_server_request_duration_seconds` - Request latency
-   - `http_server_active_requests` - Active requests
-   - `process_cpu_user_seconds_total` - CPU usage
-   - `nodejs_heap_size_total_bytes` - Memory usage
+2. Check existing metrics: `http_server_requests_errors_total`, `http_server_requests_total`
 
-#### 5.3 Explore Logs (if Loki is configured)
+#### 5.3 Explore Logs
 
 1. In **Explore**, switch to the **Loki** data source
 2. Query your logs using LogQL:
@@ -246,7 +241,7 @@ done
    {service="observability-lab-service"} | json | trace_id="abc123..."
    ```
 
-#### 5.4 Create Dashboards
+#### 5.4 Create Dashboards (optional)
 
 1. Navigate to **Dashboards** → **New Dashboard**
 2. Add panels for:
@@ -345,10 +340,26 @@ span.setAttribute("order.total", 99.99);
 
 ### Exercise 2: Error Tracking
 
-1. Call the `/api/error` endpoint multiple times
-2. In Grafana Cloud, find traces with errors
+1. Generate traffic
+
+```shell
+for i in {1..1000}; do
+  curl -s http://localhost:3000/api/users > /dev/null
+  curl -s -X POST http://localhost:3000/api/orders > /dev/null
+  curl -s http://localhost:3000/api/random > /dev/null
+  echo "Request batch $i completed"
+  sleep 1
+done
+```
+
+2. In Grafana Cloud, find error metrics
 3. Examine the error details and stack traces
-4. Calculate the error rate for your service
+4. Calculate the error rate for your service.
+   Use `http_server_requests_errors_total`, `http_server_requests_total` with `sum` function:
+
+```shell
+sum(http_server_requests_errors_total)
+```
 
 ### Exercise 3: Performance Analysis
 
