@@ -66,6 +66,20 @@ done
 3. Search for `service.name = observability-lab-service`
 4. Click on traces to explore! 🎉
 
+## 7️⃣ Load Testing
+
+Test how your service behaves under load:
+
+```bash
+# Simple test with autocannon (7 RPS - under rate limit)
+npx autocannon -c 5 -d 10 -R 7 -m POST http://localhost:3000/api/orders
+
+# Stress test with k6 (exceeds rate limits)
+npm run k6:load
+```
+
+See [README.md - Exercise 6](README.md#exercise-6-load-testing-with-autocannon-and-k6) for detailed documentation on load testing and observing error rates.
+
 ---
 
 ## 🔧 Troubleshooting

@@ -382,6 +382,120 @@ sum(http_server_requests_errors_total)
 2. Analyze the query patterns
 3. Identify which endpoints make the most DB queries
 
+### Exercise 6: Load Testing with autocannon and k6
+
+Learn how high load impacts service behavior, latency, and error rates using load testing tools.
+
+#### Install Load Testing Tools
+
+Install the testing tools as dev dependencies (already included in package.json):
+
+```bash
+npm install
+```
+
+#### Simple Load Test (autocannon)
+
+For quick testing from the CLI, we'll use [autocannon](https://github.com/mcollina/autocannon), a simple and fast HTTP benchmarking tool:
+
+```bash
+# 7 requests/second for 10 seconds (under rate limit)
+npx autocannon -c 5 -d 10 -R 7 -m POST http://localhost:3000/api/orders
+
+# With custom headers and body
+npx autocannon -c 5 -d 10 -R 7 -m POST \
+  -H "Content-Type: application/json" \
+  -b '{}' \
+  http://localhost:3000/api/orders
+
+# Longer test (20 seconds at 7 RPS)
+npx autocannon -c 5 -d 20 -R 7 -m POST http://localhost:3000/api/orders
+```
+
+**Autocannon options:**
+
+- `-c` = connections (concurrent users)
+- `-d` = duration in seconds
+- `-R` = target rate (requests per second)
+- `-m` = HTTP method
+- `-H` = header
+- `-b` = body
+
+This is perfect for quick performance checks and staying under the 10 RPS rate limit.
+
+#### Stress Test with k6 (Exceeds Rate Limit)
+
+The `/api/orders` endpoint has built-in rate limiting that starts rejecting requests when load exceeds 10 requests/second:
+
+- **RPS ≤ 10**: 0% error rate (all requests succeed)
+- **RPS = 20**: 50% error rate (probabilistic rejection)
+- **RPS ≥ 30**: 100% error rate (all requests rejected)
+
+For more advanced load testing, we use [k6](https://k6.io/), which supports complex scenarios with ramp-up patterns. Run the included stress test:
+
+```bash
+npm run k6:load
+```
+
+This k6 test will:
+
+1. Ramp up from 1 to 20 virtual users over 20 seconds
+2. Sustain 20 users for 30 seconds (exceeding the 10 RPS threshold)
+3. Ramp down to 0 users over 10 seconds
+
+**What to observe:**
+
+1. **In k6 output**: Watch the error rate increase as load grows:
+
+   ```
+   ✓ status is 200 or 201
+   ✗ status is not 503
+   ```
+
+2. **In your terminal logs**: Look for warning messages:
+
+   ```
+   WARN: Order rejected due to rate limiting
+   currentRPS: 25
+   errorProbability: 0.75
+   ```
+
+3. **In Grafana Cloud Explore (Prometheus/Mimir)**: Query the error rate:
+
+   ```promql
+   # Total rate-limited rejections
+   sum(rate(http_server_rate_limit_rejections_total[1m]))
+
+   # Overall error rate
+   sum(rate(http_server_requests_errors_total[1m])) / sum(rate(http_server_requests_total[1m]))
+   ```
+
+4. **In Grafana Cloud Explore (Tempo)**: Find traces with rate limiting:
+
+   - Search for traces where `order.rate_limited = true`
+   - Compare response times between successful and rate-limited requests
+   - Check the `order.rps` attribute to see load at rejection time
+
+5. **In Grafana Cloud Explore (Loki)**: Search for rate limit logs:
+   ```logql
+   {service="observability-lab-service"} |= "rate limiting"
+   ```
+
+#### Understanding the Results
+
+As the load test progresses, you should see:
+
+- **Phase 1 (0-20s)**: Low error rate, requests mostly succeed
+- **Phase 2 (20-50s)**: High error rate (50-80%), many 503 responses, increased latency
+- **Phase 3 (50-60s)**: Error rate decreases as virtual users ramp down
+
+This demonstrates how observability helps you:
+
+- Detect when your service is under stress
+- Understand the relationship between load and error rates
+- Set appropriate alerts and capacity limits
+- Make informed decisions about scaling
+
 ## 🔧 Troubleshooting
 
 ### Application won't start

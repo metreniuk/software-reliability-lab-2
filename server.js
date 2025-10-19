@@ -34,6 +34,17 @@ const errorCounter = meter.createCounter("http.server.requests.errors", {
   unit: "1",
 });
 
+const rateLimitCounter = meter.createCounter(
+  "http.server.rate_limit.rejections",
+  {
+    description: "Total number of requests rejected due to rate limiting",
+    unit: "1",
+  }
+);
+
+// Sliding window for tracking order requests (for rate limiting)
+const orderRequestTimestamps = [];
+
 // Setup logger with Loki integration
 const logger = pino({
   level: "info",
@@ -315,12 +326,78 @@ app.get("/api/users/:id", async (req, res) => {
 });
 
 /**
- * Create order - demonstrates complex multi-step operations
+ * Create order - demonstrates complex multi-step operations with rate limiting
  */
 app.post("/api/orders", async (req, res) => {
   const orderId = Math.floor(Math.random() * 10000);
+  const now = Date.now();
 
-  logger.info({ orderId }, "Creating new order");
+  // Track this request in the sliding window
+  orderRequestTimestamps.push(now);
+
+  // Clean up old timestamps (older than 1 second)
+  const oneSecondAgo = now - 1000;
+  while (
+    orderRequestTimestamps.length > 0 &&
+    orderRequestTimestamps[0] < oneSecondAgo
+  ) {
+    orderRequestTimestamps.shift();
+  }
+
+  // Calculate current RPS
+  const currentRPS = orderRequestTimestamps.length;
+
+  // Calculate error probability based on RPS
+  // RPS ≤ 10: 0% error rate
+  // RPS = 20: 50% error rate
+  // RPS ≥ 30: 100% error rate
+  const errorProbability = Math.min(1, Math.max(0, (currentRPS - 10) / 20));
+
+  // Add custom attributes to span
+  const span = trace.getActiveSpan();
+  if (span) {
+    span.setAttribute("order.rps", currentRPS);
+    span.setAttribute("order.error_probability", errorProbability);
+  }
+
+  // Check if we should reject this request based on error probability
+  if (Math.random() < errorProbability) {
+    rateLimitCounter.add(1, {
+      "http.route": "/api/orders",
+    });
+
+    logger.warn(
+      {
+        orderId,
+        currentRPS,
+        errorProbability,
+        // Add trace IDs for correlation
+        ...(span && {
+          trace_id: span.spanContext().traceId,
+          span_id: span.spanContext().spanId,
+        }),
+      },
+      "Order rejected due to rate limiting"
+    );
+
+    if (span) {
+      span.setAttribute("order.rate_limited", true);
+      span.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: "Rate limit exceeded",
+      });
+    }
+
+    return res.status(429).json({
+      success: false,
+      error: "Service temporarily unavailable",
+      message: `Rate limit exceeded. Current load: ${currentRPS} req/s (threshold: 10 req/s)`,
+      currentRPS,
+      errorProbability: Math.round(errorProbability * 100) + "%",
+    });
+  }
+
+  logger.info({ orderId, currentRPS }, "Creating new order");
 
   try {
     const result = await processOrder(orderId);

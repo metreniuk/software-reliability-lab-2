@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node -r ./tracing.js server.js",
-    "dev": "node -r ./tracing.js server.js"
+    "dev": "node -r ./tracing.js server.js",
+    "k6:load": "k6 run k6-load-test.js"
   },
   "keywords": [
     "opentelemetry",
@@ -37,5 +38,9 @@
     "pino": "^8.19.0",
     "pino-loki": "^2.6.0",
     "pino-pretty": "^10.3.1"
+  },
+  "devDependencies": {
+    "autocannon": "^7.15.0",
+    "k6": "^0.0.0"
   }
 }
