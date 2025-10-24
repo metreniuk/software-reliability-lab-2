@@ -42,6 +42,12 @@ const rateLimitCounter = meter.createCounter(
   }
 );
 
+const requestDuration = meter.createHistogram("http.server.duration", {
+  description: "HTTP server request duration",
+  unit: "ms",
+});
+
+
 // Sliding window for tracking order requests (for rate limiting)
 const orderRequestTimestamps = [];
 
@@ -115,12 +121,14 @@ app.use((req, res, next) => {
       errorCounter.add(1, metricAttributes);
     }
 
+    requestDuration.record(duration, metricAttributes);
+
     logger.info(
       {
         method: req.method,
         url: req.url,
         status: res.statusCode,
-        duration: `${duration}ms`,
+        duration,
         // Add trace IDs for correlation with traces in Grafana
         ...(spanContext && {
           trace_id: spanContext.traceId,

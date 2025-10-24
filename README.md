@@ -401,6 +401,9 @@ For quick testing from the CLI, we'll use [autocannon](https://github.com/mcolli
 ```bash
 # 7 requests/second for 10 seconds (under rate limit)
 npx autocannon -c 5 -d 10 -R 7 -m POST http://localhost:3000/api/orders
+# npx autocannon -c 5 -d 10 -R 7 -m POST http://localhost:3000/api/users
+# npx autocannon -c 5 -d 10 -R 7 -m POST http://localhost:3000/api/random
+# npx autocannon -c 5 -d 10 -R 7 -m POST http://localhost:3000/api/error
 
 # With custom headers and body
 npx autocannon -c 5 -d 10 -R 7 -m POST \
